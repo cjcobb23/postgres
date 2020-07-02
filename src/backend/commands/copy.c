@@ -2967,8 +2967,12 @@ CopyFrom(CopyState cstate)
 		else
 			insertMethod = CIM_MULTI;
 
-		CopyMultiInsertInfoInit(&multiInsertInfo, resultRelInfo, cstate,
+        ereport(LOG, errmsg("CopyFrom insertMethod is %s",
+            (insertMethod ==
+            CIM_MULTI ? "CIM_MULTI" : "CIM_MULTI_CONDITIONAL")));
+        CopyMultiInsertInfoInit(&multiInsertInfo, resultRelInfo, cstate,
 								estate, mycid, ti_options);
+        ereport(LOG, errmsg("CopyFrom CopyMultiInsertInfoInit finished"));
 	}
 
 	/*
@@ -3006,6 +3010,7 @@ CopyFrom(CopyState cstate)
 	errcallback.previous = error_context_stack;
 	error_context_stack = &errcallback;
 
+    ereport(LOG, errmsg("CopyFrom start loop"));
 	for (;;)
 	{
 		TupleTableSlot *myslot;
@@ -3321,6 +3326,7 @@ CopyFrom(CopyState cstate)
 			processed++;
 		}
 	}
+    ereport(LOG, errmsg("CopyFrom end loop"));
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != CIM_SINGLE)
