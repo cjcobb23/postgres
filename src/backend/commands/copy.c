@@ -2658,7 +2658,7 @@ CopyMultiInsertInfoStore(CopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 uint64
 CopyFrom(CopyState cstate)
 {
-	ResultRelInfo *resultRelInfo;
+    ResultRelInfo *resultRelInfo;
 	ResultRelInfo *target_resultRelInfo;
 	ResultRelInfo *prevResultRelInfo = NULL;
 	EState	   *estate = CreateExecutorState(); /* for ExecConstraints() */
@@ -2681,7 +2681,9 @@ CopyFrom(CopyState cstate)
 
 	Assert(cstate->rel);
 
-	/*
+    ereport(LOG, errmsg("CopyFrom start"));
+
+ 	/*
 	 * The target must be a plain, foreign, or partitioned relation, or have
 	 * an INSTEAD OF INSERT row trigger.  (Currently, such triggers are only
 	 * allowed on views, so we only hint about them in the view case.)
@@ -3371,6 +3373,7 @@ CopyFrom(CopyState cstate)
 
 	FreeExecutorState(estate);
 
+    ereport(LOG, errmsg("CopyFrom end"));
 	return processed;
 }
 
