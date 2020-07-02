@@ -2986,13 +2986,8 @@ CopyFrom(CopyState cstate)
 			insertMethod = CIM_MULTI_CONDITIONAL;
 		else
 			insertMethod = CIM_MULTI;
-
-        ereport(LOG, errmsg("CopyFrom insertMethod is %s",
-            (insertMethod ==
-            CIM_MULTI ? "CIM_MULTI" : "CIM_MULTI_CONDITIONAL")));
         CopyMultiInsertInfoInit(&multiInsertInfo, resultRelInfo, cstate,
 								estate, mycid, ti_options);
-        ereport(LOG, errmsg("CopyFrom CopyMultiInsertInfoInit finished"));
 	}
 
 	/*
@@ -3032,6 +3027,7 @@ CopyFrom(CopyState cstate)
 
 	uint64_t insertIntoBufferNs = 0;
 	uint64_t multiInfoIsFullNs = 0;
+	uint64_t numFlushes = 0;
     ereport(LOG, errmsg("CopyFrom start loop"));
 	for (;;)
 	{
@@ -3297,6 +3293,7 @@ CopyFrom(CopyState cstate)
 					 */
 					if (CopyMultiInsertInfoIsFull(&multiInsertInfo))
                     {
+					    ++numFlushes;
 					    struct timespec start = startTimer();
                         CopyMultiInsertInfoFlush(&multiInsertInfo,
                             resultRelInfo);
@@ -3356,9 +3353,11 @@ CopyFrom(CopyState cstate)
 			processed++;
 		}
 	}
-    ereport(LOG, errmsg("CopyFrom end loop ns in tight loops: %lfms, %lfms",
+    ereport(LOG, errmsg("CopyFrom end loop ns in tight loops: %lfms, %lfms, "
+                        "flushes: %lu",
         (multiInfoIsFullNs + 0.0) / 1000000,
-            (insertIntoBufferNs + 0.0) / 1000000));
+            (insertIntoBufferNs + 0.0) / 1000000,
+                numFlushes));
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != CIM_SINGLE)
