@@ -3030,7 +3030,8 @@ CopyFrom(CopyState cstate)
 	errcallback.previous = error_context_stack;
 	error_context_stack = &errcallback;
 
-	uint64_t totalns = 0;
+	uint64_t insertIntoBufferNs = 0;
+	uint64_t multiInfoIsFullNs = 0;
     ereport(LOG, errmsg("CopyFrom start loop"));
 	for (;;)
 	{
@@ -3276,10 +3277,12 @@ CopyFrom(CopyState cstate)
 				/* Store the slot in the multi-insert buffer, when enabled. */
 				if (insertMethod == CIM_MULTI || leafpart_use_multi_insert)
 				{
-					/*
-					 * The slot previously might point into the per-tuple
-					 * context. For batching it needs to be longer lived.
-					 */
+                    struct timespec startInsert = startTimer();
+
+                    /*
+                     * The slot previously might point into the per-tuple
+                     * context. For batching it needs to be longer lived.
+                     */
 					ExecMaterializeSlot(myslot);
 
 					/* Add this tuple to the tuple buffer */
@@ -3297,8 +3300,9 @@ CopyFrom(CopyState cstate)
 					    struct timespec start = startTimer();
                         CopyMultiInsertInfoFlush(&multiInsertInfo,
                             resultRelInfo);
-                        totalns += endTimer(&start);
+                        multiInfoIsFullNs += endTimer(&start);
                     }
+					insertIntoBufferNs += endTimer(&startInsert);
 				}
 				else
 				{
@@ -3352,8 +3356,9 @@ CopyFrom(CopyState cstate)
 			processed++;
 		}
 	}
-    ereport(LOG, errmsg("CopyFrom end loop ns in tight loop: %lfms",
-        (totalns + 0.0) / 1000000));
+    ereport(LOG, errmsg("CopyFrom end loop ns in tight loops: %lfms, %lfms",
+        (multiInfoIsFullNs + 0.0) / 1000000,
+            (insertIntoBufferNs + 0.0) / 1000000));
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != CIM_SINGLE)
