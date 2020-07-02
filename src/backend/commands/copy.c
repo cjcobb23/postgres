@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include <ctype.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -61,6 +62,25 @@
 
 #define ISOCTAL(c) (((c) >= '0') && ((c) <= '7'))
 #define OCTVALUE(c) ((c) - '0')
+
+struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+        start->tv_nsec;
+}
 
 /*
  * Represents the different source/dest cases we need to worry about at
@@ -3010,6 +3030,7 @@ CopyFrom(CopyState cstate)
 	errcallback.previous = error_context_stack;
 	error_context_stack = &errcallback;
 
+	uint64_t totalns = 0;
     ereport(LOG, errmsg("CopyFrom start loop"));
 	for (;;)
 	{
@@ -3272,7 +3293,12 @@ CopyFrom(CopyState cstate)
 					 * buffers out to their tables.
 					 */
 					if (CopyMultiInsertInfoIsFull(&multiInsertInfo))
-						CopyMultiInsertInfoFlush(&multiInsertInfo, resultRelInfo);
+                    {
+					    struct timespec start = startTimer();
+                        CopyMultiInsertInfoFlush(&multiInsertInfo,
+                            resultRelInfo);
+                        totalns += endTimer(&start);
+                    }
 				}
 				else
 				{
@@ -3326,7 +3352,8 @@ CopyFrom(CopyState cstate)
 			processed++;
 		}
 	}
-    ereport(LOG, errmsg("CopyFrom end loop"));
+    ereport(LOG, errmsg("CopyFrom end loop ns in tight loop: %lfms",
+        (totalns + 0.0) / 1000000));
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != CIM_SINGLE)
