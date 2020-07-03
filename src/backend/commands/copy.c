@@ -2572,7 +2572,8 @@ CopyMultiInsertBufferCleanup(CopyMultiInsertInfo *miinfo,
  * 'curr_rri'.
  */
 static inline void
-CopyMultiInsertInfoFlush(CopyMultiInsertInfo *miinfo, ResultRelInfo *curr_rri)
+CopyMultiInsertInfoFlush(CopyMultiInsertInfo *miinfo, ResultRelInfo *curr_rri,
+    uint64_t* flushNs)
 {
 	ListCell   *lc;
 
@@ -2580,7 +2581,12 @@ CopyMultiInsertInfoFlush(CopyMultiInsertInfo *miinfo, ResultRelInfo *curr_rri)
 	{
 		CopyMultiInsertBuffer *buffer = (CopyMultiInsertBuffer *) lfirst(lc);
 
+		struct timespec start;
+		if (flushNs)
+		    start = startTimer();
 		CopyMultiInsertBufferFlush(miinfo, buffer);
+		if (flushNs)
+		    *flushNs += endTimer(&start);
 	}
 
 	miinfo->bufferedTuples = 0;
@@ -3027,6 +3033,7 @@ CopyFrom(CopyState cstate)
 
 	uint64_t insertIntoBufferNs = 0;
 	uint64_t multiInfoIsFullNs = 0;
+	uint64_t flushNs = 0;
 	uint64_t numFlushes = 0;
     ereport(LOG, errmsg("CopyFrom start loop"));
 	for (;;)
@@ -3133,7 +3140,8 @@ CopyFrom(CopyState cstate)
 					 * Flush pending inserts if this partition can't use
 					 * batching, so rows are visible to triggers etc.
 					 */
-					CopyMultiInsertInfoFlush(&multiInsertInfo, resultRelInfo);
+					CopyMultiInsertInfoFlush(&multiInsertInfo, resultRelInfo,
+					    NULL);
 				}
 
 				if (bistate != NULL)
@@ -3296,7 +3304,7 @@ CopyFrom(CopyState cstate)
 					    ++numFlushes;
 					    struct timespec start = startTimer();
                         CopyMultiInsertInfoFlush(&multiInsertInfo,
-                            resultRelInfo);
+                            resultRelInfo, &flushNs);
                         multiInfoIsFullNs += endTimer(&start);
                     }
 					insertIntoBufferNs += endTimer(&startInsert);
@@ -3354,16 +3362,17 @@ CopyFrom(CopyState cstate)
 		}
 	}
     ereport(LOG, errmsg("CopyFrom end loop ns in tight loops: %lfms, %lfms, "
-                        "flushes: %lu",
+                        "%lfms, flushes: %lu",
         (multiInfoIsFullNs + 0.0) / 1000000,
             (insertIntoBufferNs + 0.0) / 1000000,
+            (flushNs + 0.0) / 100000,
                 numFlushes));
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != CIM_SINGLE)
 	{
 		if (!CopyMultiInsertInfoIsEmpty(&multiInsertInfo))
-			CopyMultiInsertInfoFlush(&multiInsertInfo, NULL);
+			CopyMultiInsertInfoFlush(&multiInsertInfo, NULL, NULL);
 	}
 
 	/* Done, clean up */

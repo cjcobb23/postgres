@@ -1,3 +1,4 @@
+# this exists for clion to index the code
 cmake_minimum_required(VERSION 3.17)
 project(postgres)
 
