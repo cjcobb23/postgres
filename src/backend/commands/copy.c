@@ -3365,7 +3365,7 @@ CopyFrom(CopyState cstate)
                         "%lfms, flushes: %lu",
         (multiInfoIsFullNs + 0.0) / 1000000,
             (insertIntoBufferNs + 0.0) / 1000000,
-            (flushNs + 0.0) / 100000,
+            (flushNs + 0.0) / 1000000,
                 numFlushes));
 
 	/* Flush any remaining buffered tuples */
