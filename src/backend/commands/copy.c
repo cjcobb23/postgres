@@ -63,7 +63,7 @@
 #define ISOCTAL(c) (((c) >= '0') && ((c) <= '7'))
 #define OCTVALUE(c) ((c) - '0')
 
-struct timespec startTimer(void);
+static struct timespec startTimer(void);
 struct timespec
 startTimer(void)
 {
@@ -72,7 +72,7 @@ startTimer(void)
     return ret;
 }
 
-uint64_t endTimer(struct timespec const* start);
+static uint64_t endTimer(struct timespec const* start);
 uint64_t
 endTimer(struct timespec const* start)
 {

@@ -106,6 +106,8 @@
  */
 #include "postgres.h"
 
+#include <time.h>
+
 #include "access/genam.h"
 #include "access/relscan.h"
 #include "access/tableam.h"
@@ -115,6 +117,25 @@
 #include "nodes/nodeFuncs.h"
 #include "storage/lmgr.h"
 #include "utils/snapmgr.h"
+
+static struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+static uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+           start->tv_nsec;
+}
 
 /* waitMode argument to check_exclusion_or_unique_constraint() */
 typedef enum
@@ -288,6 +309,12 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 	Datum		values[INDEX_MAX_KEYS];
 	bool		isnull[INDEX_MAX_KEYS];
 
+	static uint64_t inserts = 0;
+	static uint64_t totalInsertNs = 0;
+	static uint64_t indexNs = 0;
+
+	struct timespec startInsert = startTimer();
+
 	Assert(ItemPointerIsValid(tupleid));
 
 	/*
@@ -390,6 +417,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 		else
 			checkUnique = UNIQUE_CHECK_PARTIAL;
 
+		struct timespec startIndex = startTimer();
 		satisfiesConstraint =
 			index_insert(indexRelation, /* index relation */
 						 values,	/* array of index Datums */
@@ -398,6 +426,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 						 heapRelation,	/* heap relation */
 						 checkUnique,	/* type of uniqueness check to do */
 						 indexInfo);	/* index AM may need this */
+        indexNs += endTimer(&startIndex);
 
 		/*
 		 * If the index has an associated exclusion constraint, check that.
@@ -457,6 +486,16 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 				*specConflict = true;
 		}
 	}
+
+	totalInsertNs += endTimer(&startInsert);
+
+	if (++inserts % 100000)
+    {
+        ereport(LOG, errmsg("ExecInsertIndexTuples %lu, %lfms, %lfms",
+            inserts,
+            (totalInsertNs + 0.0) / 1000000,
+            (indexNs + 0.0) / 1000000));
+    }
 
 	return result;
 }
