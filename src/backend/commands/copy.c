@@ -2500,11 +2500,14 @@ CopyMultiInsertBufferFlush(CopyMultiInsertInfo *miinfo,
 			List	   *recheckIndexes;
 
 			cstate->cur_lineno = buffer->linenos[i];
-			struct timespec start = startTimer();
+			struct timespec start;
+			if (insertTuplesNs)
+			    start = startTimer();
 			recheckIndexes =
 				ExecInsertIndexTuples(buffer->slots[i], estate, false, NULL,
 									  NIL);
-			*insertTuplesNs += endTimer(&start);
+			if (insertTuplesNs)
+    			*insertTuplesNs += endTimer(&start);
 			ExecARInsertTriggers(estate, resultRelInfo,
 								 slots[i], recheckIndexes,
 								 cstate->transition_capture);
