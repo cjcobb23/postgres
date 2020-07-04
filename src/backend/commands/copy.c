@@ -2451,7 +2451,8 @@ CopyMultiInsertInfoIsEmpty(CopyMultiInsertInfo *miinfo)
  */
 static inline void
 CopyMultiInsertBufferFlush(CopyMultiInsertInfo *miinfo,
-						   CopyMultiInsertBuffer *buffer)
+						   CopyMultiInsertBuffer *buffer,
+                            uint64_t *insertTuplesNs)
 {
 	MemoryContext oldcontext;
 	int			i;
@@ -2499,9 +2500,11 @@ CopyMultiInsertBufferFlush(CopyMultiInsertInfo *miinfo,
 			List	   *recheckIndexes;
 
 			cstate->cur_lineno = buffer->linenos[i];
+			struct timespec start = startTimer();
 			recheckIndexes =
 				ExecInsertIndexTuples(buffer->slots[i], estate, false, NULL,
 									  NIL);
+			*insertTuplesNs += endTimer(&start);
 			ExecARInsertTriggers(estate, resultRelInfo,
 								 slots[i], recheckIndexes,
 								 cstate->transition_capture);
@@ -2573,7 +2576,7 @@ CopyMultiInsertBufferCleanup(CopyMultiInsertInfo *miinfo,
  */
 static inline void
 CopyMultiInsertInfoFlush(CopyMultiInsertInfo *miinfo, ResultRelInfo *curr_rri,
-    uint64_t* flushNs)
+    uint64_t* flushNs, uint64_t* insertTuplesNs)
 {
 	ListCell   *lc;
 
@@ -2584,7 +2587,7 @@ CopyMultiInsertInfoFlush(CopyMultiInsertInfo *miinfo, ResultRelInfo *curr_rri,
 		struct timespec start;
 		if (flushNs)
 		    start = startTimer();
-		CopyMultiInsertBufferFlush(miinfo, buffer);
+		CopyMultiInsertBufferFlush(miinfo, buffer, insertTuplesNs);
 		if (flushNs)
 		    *flushNs += endTimer(&start);
 	}
@@ -3035,6 +3038,7 @@ CopyFrom(CopyState cstate)
 	uint64_t multiInfoIsFullNs = 0;
 	uint64_t flushNs = 0;
 	uint64_t numFlushes = 0;
+	uint64_t insertTuplesNs = 0;
     ereport(LOG, errmsg("CopyFrom start loop"));
 	for (;;)
 	{
@@ -3141,7 +3145,7 @@ CopyFrom(CopyState cstate)
 					 * batching, so rows are visible to triggers etc.
 					 */
 					CopyMultiInsertInfoFlush(&multiInsertInfo, resultRelInfo,
-					    NULL);
+					    NULL, NULL);
 				}
 
 				if (bistate != NULL)
@@ -3304,7 +3308,7 @@ CopyFrom(CopyState cstate)
 					    ++numFlushes;
 					    struct timespec start = startTimer();
                         CopyMultiInsertInfoFlush(&multiInsertInfo,
-                            resultRelInfo, &flushNs);
+                            resultRelInfo, &flushNs, &insertTuplesNs);
                         multiInfoIsFullNs += endTimer(&start);
                     }
 					insertIntoBufferNs += endTimer(&startInsert);
@@ -3362,17 +3366,18 @@ CopyFrom(CopyState cstate)
 		}
 	}
     ereport(LOG, errmsg("CopyFrom end loop ns in tight loops: %lfms, %lfms, "
-                        "%lfms, flushes: %lu",
+                        "%lfms, %lfms, flushes: %lu",
         (multiInfoIsFullNs + 0.0) / 1000000,
             (insertIntoBufferNs + 0.0) / 1000000,
             (flushNs + 0.0) / 1000000,
+            (insertTuplesNs + 0.0) / 1000000,
                 numFlushes));
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != CIM_SINGLE)
 	{
 		if (!CopyMultiInsertInfoIsEmpty(&multiInsertInfo))
-			CopyMultiInsertInfoFlush(&multiInsertInfo, NULL, NULL);
+			CopyMultiInsertInfoFlush(&multiInsertInfo, NULL, NULL, NULL);
 	}
 
 	/* Done, clean up */
