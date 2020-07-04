@@ -489,7 +489,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 
 	totalInsertNs += endTimer(&startInsert);
 
-	if (++inserts % 100000)
+	if (++inserts % 100000 == 0)
     {
         ereport(LOG, errmsg("ExecInsertIndexTuples %lu, %lfms, %lfms",
             inserts,
