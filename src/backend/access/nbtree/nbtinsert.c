@@ -247,6 +247,7 @@ top:
 		 */
 		stack = _bt_search(rel, itup_key, &buf, BT_WRITE, NULL);
 	}
+    partialNs += endTimer(&partialStart);
 
 	insertstate.buf = buf;
 	buf = InvalidBuffer;		/* insertstate.buf now owns the buffer */
@@ -307,7 +308,6 @@ top:
 		if (itup_key->heapkeyspace)
 			itup_key->scantid = &itup->t_tid;
 	}
-    partialNs += endTimer(&partialStart);
 
 	if (checkUnique != UNIQUE_CHECK_EXISTING)
 	{
