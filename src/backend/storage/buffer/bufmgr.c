@@ -1563,15 +1563,15 @@ ReleaseAndReadBuffer(Buffer buffer,
 				RelFileNodeEquals(bufHdr->tag.rnode, relation->rd_node) &&
 				bufHdr->tag.forkNum == forkNum)
             {
-//                ret = buffer;
-//                return_ret = true;
-                return buffer;
+                ret = buffer;
+                return_ret = true;
+//                return buffer;
             }
 			else
             {
-                ResourceOwnerForgetBuffer(CurrentResourceOwner, buffer);
-                LocalRefCount[-buffer - 1]--;
-//                ret = ReadBuffer(relation, blockNum);
+//                ResourceOwnerForgetBuffer(CurrentResourceOwner, buffer);
+//                LocalRefCount[-buffer - 1]--;
+                ret = ReadBuffer(relation, blockNum);
             }
 			ns1 += endTimer(&start);
 		}
@@ -1583,9 +1583,9 @@ ReleaseAndReadBuffer(Buffer buffer,
 				RelFileNodeEquals(bufHdr->tag.rnode, relation->rd_node) &&
 				bufHdr->tag.forkNum == forkNum)
             {
-//			    ret = buffer;
-//			    return_ret = true;
-                return buffer;
+			    ret = buffer;
+			    return_ret = true;
+//                return buffer;
             }
 			else
             {
