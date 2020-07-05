@@ -240,7 +240,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
             iterations,
             (totalNs + 0.0) / 1000000,
             (partialNs + 0.0) / 1000000));
-        iterations = 0,
+        iterations = 0;
         totalNs = 0;
         partialNs = 0;
     }

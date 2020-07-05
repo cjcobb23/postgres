@@ -22,6 +22,8 @@
  */
 #include "postgres.h"
 
+#include <time.h>
+
 #include "access/nbtree.h"
 #include "access/nbtxlog.h"
 #include "access/transam.h"
@@ -32,6 +34,25 @@
 #include "storage/lmgr.h"
 #include "storage/predicate.h"
 #include "utils/snapmgr.h"
+
+static struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+static uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+           start->tv_nsec;
+}
 
 static BTMetaPageData *_bt_getmeta(Relation rel, Buffer metabuf);
 static bool _bt_mark_page_halfdead(Relation rel, Buffer leafbuf,
@@ -898,14 +919,42 @@ _bt_getbuf(Relation rel, BlockNumber blkno, int access)
 Buffer
 _bt_relandgetbuf(Relation rel, Buffer obuf, BlockNumber blkno, int access)
 {
+    static uint64_t invocations = 0;
+    static uint64_t totalNs = 0;
+    static uint64_t ns1 = 0;
+    static uint64_t ns2 = 0;
+    static uint64_t ns3 = 0;
+
 	Buffer		buf;
 
 	Assert(blkno != P_NEW);
+	++invocations;
+	struct timespec start = startTimer();
 	if (BufferIsValid(obuf))
 		LockBuffer(obuf, BUFFER_LOCK_UNLOCK);
+	ns1 += endTimer(&start);
 	buf = ReleaseAndReadBuffer(obuf, rel, blkno);
+	ns2 += endTimer(&start);
 	LockBuffer(buf, access);
+	ns3 += endTimer(&start);
 	_bt_checkpage(rel, buf);
+
+    totalNs += endTimer(&start);
+    if (++invocations % 100000 == 0)
+    {
+        ereport(LOG, errmsg("_bt_relandgetbuf %lu, %lfms, %lfms, %lfms, %lfms",
+            invocations,
+            (totalNs + 0.0) / 1000000,
+            (ns1 + 0.0) / 1000000,
+            (ns2 + 0.0) / 1000000,
+            (ns3 + 0.0) / 1000000
+            ));
+        invocations = 0;
+        totalNs = 0;
+        ns1 = 0;
+        ns2 = 0;
+        ns3 = 0;
+    }
 	return buf;
 }
 
