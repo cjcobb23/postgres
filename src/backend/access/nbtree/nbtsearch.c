@@ -163,7 +163,6 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		if (P_ISLEAF(opaque))
 			break;
 
-        struct timespec partialStart = startTimer();
 		/*
 		 * Find the appropriate item on the internal page, and get the child
 		 * page that it points to.
@@ -173,7 +172,6 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		itup = (IndexTuple) PageGetItem(page, itemid);
 		blkno = BTreeInnerTupleGetDownLink(itup);
 		par_blkno = BufferGetBlockNumber(*bufP);
-        partialNs += endTimer(&partialStart);
 
 		/*
 		 * We need to save the location of the index entry we chose in the
@@ -189,12 +187,14 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		 * to check if bts_offset remains the position of this same pivot
 		 * tuple.)
 		 */
+        struct timespec partialStart = startTimer();
 		new_stack = (BTStack) palloc(sizeof(BTStackData));
 		new_stack->bts_blkno = par_blkno;
 		new_stack->bts_offset = offnum;
 		new_stack->bts_btentry = blkno;
 		new_stack->bts_parent = stack_in;
 
+        partialNs += endTimer(&partialStart);
 		/*
 		 * Page level 1 is lowest non-leaf page level prior to leaves.  So, if
 		 * we're on the level 1 and asked to lock leaf page in write mode,
