@@ -18,6 +18,8 @@
  */
 #include "postgres.h"
 
+#include <time.h>
+
 #include "access/nbtree.h"
 #include "access/nbtxlog.h"
 #include "access/relscan.h"
@@ -37,6 +39,24 @@
 #include "utils/index_selfuncs.h"
 #include "utils/memutils.h"
 
+static struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+static uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+           start->tv_nsec;
+}
 
 /* Working state needed by btvacuumpage */
 typedef struct
@@ -195,6 +215,10 @@ btinsert(Relation rel, Datum *values, bool *isnull,
 		 IndexUniqueCheck checkUnique,
 		 IndexInfo *indexInfo)
 {
+    static uint64_t invocations = 0;
+    static uint64_t totalNs = 0;
+    static uint64_t doinsertNs = 0;
+
 	bool		result;
 	IndexTuple	itup;
 
@@ -202,10 +226,21 @@ btinsert(Relation rel, Datum *values, bool *isnull,
 	itup = index_form_tuple(RelationGetDescr(rel), values, isnull);
 	itup->t_tid = *ht_ctid;
 
+	struct timespec start = startTimer();
 	result = _bt_doinsert(rel, itup, checkUnique, heapRel);
+	totalNs += endTimer(&start);
 
 	pfree(itup);
 
+    if (++invocations % 100000 == 0)
+    {
+        ereport(LOG, errmsg("btinsert %lu, %lfms, %lfms",
+            invocations,
+            (totalNs + 0.0) / 1000000,
+            (doinsertNs + 0.0) / 1000000));
+        totalNs = 0;
+        doinsertNs = 0;
+    }
 	return result;
 }
 
