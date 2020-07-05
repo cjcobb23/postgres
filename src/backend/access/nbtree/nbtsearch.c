@@ -129,7 +129,6 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		return (BTStack) NULL;
 
 	static uint64_t iterations = 0;
-    struct timespec partialStart = startTimer();
 	/* Loop iterates once per level descended in the tree */
 	for (;;)
 	{
@@ -143,6 +142,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		BTStack		new_stack;
 
 		++iterations;
+        struct timespec partialStart = startTimer();
 		/*
 		 * Race -- the page we just grabbed may have split since we read its
 		 * pointer in the parent (or metapage).  If it has, we may need to
@@ -161,6 +161,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		/* if this is a leaf page, we're done */
 		page = BufferGetPage(*bufP);
 		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+        partialNs += endTimer(&partialStart);
 		if (P_ISLEAF(opaque))
 			break;
 
@@ -208,7 +209,6 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		/* okay, all set to move down a level */
 		stack_in = new_stack;
 	}
-	partialNs += endTimer(&partialStart);
 
 	/*
 	 * If we're asked to lock leaf in write mode, but didn't manage to, then
