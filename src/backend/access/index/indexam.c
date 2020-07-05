@@ -43,6 +43,8 @@
 
 #include "postgres.h"
 
+#include <time.h>
+
 #include "access/amapi.h"
 #include "access/heapam.h"
 #include "access/relscan.h"
@@ -57,6 +59,24 @@
 #include "storage/predicate.h"
 #include "utils/snapmgr.h"
 
+static struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+static uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+           start->tv_nsec;
+}
 
 /* ----------------------------------------------------------------
  *					macros used in index_ routines
@@ -175,6 +195,10 @@ index_insert(Relation indexRelation,
 			 IndexUniqueCheck checkUnique,
 			 IndexInfo *indexInfo)
 {
+    static uint64_t totalNs = 0;
+    static uint64_t aminsertNs = 0;
+    static uint64_t invocations = 0;
+    struct timespec start = startTimer();
 	RELATION_CHECKS;
 	CHECK_REL_PROCEDURE(aminsert);
 
@@ -183,9 +207,23 @@ index_insert(Relation indexRelation,
 									   (HeapTuple) NULL,
 									   InvalidBuffer);
 
-	return indexRelation->rd_indam->aminsert(indexRelation, values, isnull,
-											 heap_t_ctid, heapRelation,
-											 checkUnique, indexInfo);
+	struct timespec startAmInsert = startTimer();
+	bool ret = indexRelation->rd_indam->aminsert(indexRelation, values, isnull,
+        heap_t_ctid, heapRelation,
+        checkUnique, indexInfo);
+	aminsertNs += endTimer(&startAmInsert);
+	totalNs += endTimer(&start);
+
+    if (++invocations % 100000 == 0)
+    {
+        ereport(LOG, errmsg("index_insert %lu, %lfms, %lfms",
+            invocations,
+            (totalNs + 0.0) / 1000000,
+            (aminsertNs + 0.0) / 1000000));
+        totalNs = 0;
+        aminsertNs = 0;
+    }
+    return ret;
 }
 
 /*

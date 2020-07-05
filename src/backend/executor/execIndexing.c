@@ -495,6 +495,8 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
             inserts,
             (totalInsertNs + 0.0) / 1000000,
             (indexNs + 0.0) / 1000000));
+        totalInsertNs = 0;
+        indexNs = 0;
     }
 
 	return result;
