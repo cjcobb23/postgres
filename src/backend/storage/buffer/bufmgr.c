@@ -1541,6 +1541,7 @@ ReleaseAndReadBuffer(Buffer buffer,
 					 BlockNumber blockNum)
 {
     static uint64_t invocations = 0;
+    static uint64_t reads = 0;
     static uint64_t totalNs = 0;
     static uint64_t ns1 = 0;
     static uint64_t ns2 = 0;
@@ -1598,6 +1599,7 @@ ReleaseAndReadBuffer(Buffer buffer,
 
 	if (!return_ret)
     {
+	    ++reads;
 	    ret = ReadBuffer(relation, blockNum);
 	    ns3 += endTimer(&start);
     }
@@ -1605,14 +1607,16 @@ ReleaseAndReadBuffer(Buffer buffer,
     totalNs += endTimer(&start);
     if (++invocations % 100000 == 0)
     {
-        ereport(LOG, errmsg("ReleaseAndReadBuffer %lu, %lfms, %lfms, %lfms, %lfms",
+        ereport(LOG, errmsg("ReleaseAndReadBuffer %lu, %lu, %lfms, %lfms, %lfms, %lfms",
             invocations,
+            ++reads,
             (totalNs + 0.0) / 1000000,
             (ns1 + 0.0) / 1000000,
             (ns2 + 0.0) / 1000000,
             (ns3 + 0.0) / 1000000
         ));
         invocations = 0;
+        reads = 0;
         totalNs = 0;
         ns1 = 0;
         ns2 = 0;
