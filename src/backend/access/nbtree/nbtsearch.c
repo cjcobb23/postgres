@@ -187,14 +187,12 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		 * to check if bts_offset remains the position of this same pivot
 		 * tuple.)
 		 */
-        struct timespec partialStart = startTimer();
 		new_stack = (BTStack) palloc(sizeof(BTStackData));
 		new_stack->bts_blkno = par_blkno;
 		new_stack->bts_offset = offnum;
 		new_stack->bts_btentry = blkno;
 		new_stack->bts_parent = stack_in;
 
-        partialNs += endTimer(&partialStart);
 		/*
 		 * Page level 1 is lowest non-leaf page level prior to leaves.  So, if
 		 * we're on the level 1 and asked to lock leaf page in write mode,
@@ -204,7 +202,9 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 			page_access = BT_WRITE;
 
 		/* drop the read lock on the parent page, acquire one on the child */
+        struct timespec partialStart = startTimer();
 		*bufP = _bt_relandgetbuf(rel, *bufP, blkno, page_access);
+        partialNs += endTimer(&partialStart);
 
 		/* okay, all set to move down a level */
 		stack_in = new_stack;
