@@ -689,14 +689,18 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 	 * miss.
 	 */
 	pgstat_count_buffer_read(reln);
-	ns2 += endTimer(&start);
+	ns1 += endTimer(&start);
 	buf = ReadBuffer_common(reln->rd_smgr, reln->rd_rel->relpersistence,
 							forkNum, blockNum, mode, strategy, &hit);
-	ns3 += endTimer(&start);
 	if (hit)
     {
+        ns2 += endTimer(&start);
 	    ++hits;
         pgstat_count_buffer_hit(reln);
+    }
+	else
+    {
+        ns3 += endTimer(&start);
     }
 
 	totalNs += endTimer(&start);
@@ -710,7 +714,6 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
             (ns2 + 0.0) / 1000000,
             (ns3 + 0.0) / 1000000
         ));
-        invocations = 0;
         hits = 0;
         totalNs = 0;
         ns1 = 0;
