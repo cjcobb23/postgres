@@ -15,6 +15,8 @@
 
 #include "postgres.h"
 
+#include <time.h>
+
 #include "access/nbtree.h"
 #include "access/nbtxlog.h"
 #include "access/tableam.h"
@@ -24,6 +26,25 @@
 #include "storage/lmgr.h"
 #include "storage/predicate.h"
 #include "storage/smgr.h"
+
+static struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+static uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+           start->tv_nsec;
+}
 
 /* Minimum tree height for application of fastpath optimization */
 #define BTREE_FASTPATH_MIN_LEVEL	2
@@ -79,6 +100,10 @@ bool
 _bt_doinsert(Relation rel, IndexTuple itup,
 			 IndexUniqueCheck checkUnique, Relation heapRel)
 {
+    static uint64_t invocations = 0;
+    static uint64_t totalNs = 0;
+    static uint64_t partialNs = 0;
+
 	bool		is_unique = false;
 	BTInsertStateData insertstate;
 	BTScanInsert itup_key;
@@ -86,6 +111,9 @@ _bt_doinsert(Relation rel, IndexTuple itup,
 	Buffer		buf;
 	bool		fastpath;
 	bool		checkingunique = (checkUnique != UNIQUE_CHECK_NO);
+
+	struct timespec start = startTimer();
+	struct timespec partialStart = startTimer();
 
 	/* we need an insertion scan key to do our search, so build one */
 	itup_key = _bt_mkscankey(rel, itup);
@@ -210,6 +238,8 @@ top:
 		}
 	}
 
+	partialNs += endTimer(&partialStart);
+
 	if (!fastpath)
 	{
 		/*
@@ -312,6 +342,17 @@ top:
 	if (stack)
 		_bt_freestack(stack);
 	pfree(itup_key);
+
+	totalNs += endTimer(&start);
+    if (++invocations % 100000 == 0)
+    {
+        ereport(LOG, errmsg("_bt_doinsert %lu, %lfms, %lfms",
+            invocations,
+            (totalNs + 0.0) / 1000000,
+            (partialNs + 0.0) / 1000000));
+        totalNs = 0;
+        partialNs = 0;
+    }
 
 	return is_unique;
 }
