@@ -141,7 +141,6 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		BlockNumber par_blkno;
 		BTStack		new_stack;
 
-		++iterations;
 		/*
 		 * Race -- the page we just grabbed may have split since we read its
 		 * pointer in the parent (or metapage).  If it has, we may need to
@@ -163,6 +162,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		if (P_ISLEAF(opaque))
 			break;
 
+        ++iterations;
 		/*
 		 * Find the appropriate item on the internal page, and get the child
 		 * page that it points to.
