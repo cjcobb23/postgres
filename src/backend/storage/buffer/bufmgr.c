@@ -1609,7 +1609,7 @@ ReleaseAndReadBuffer(Buffer buffer,
     {
         ereport(LOG, errmsg("ReleaseAndReadBuffer %lu, %lu, %lfms, %lfms, %lfms, %lfms",
             invocations,
-            ++reads,
+            reads,
             (totalNs + 0.0) / 1000000,
             (ns1 + 0.0) / 1000000,
             (ns2 + 0.0) / 1000000,
