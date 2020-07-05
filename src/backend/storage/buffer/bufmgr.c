@@ -31,6 +31,7 @@
 #include "postgres.h"
 
 #include <sys/file.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "access/tableam.h"
@@ -53,6 +54,24 @@
 #include "utils/resowner_private.h"
 #include "utils/timestamp.h"
 
+static struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+static uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+           start->tv_nsec;
+}
 
 /* Note: these two macros only work on shared buffers, not local ones! */
 #define BufHdrGetBlock(bufHdr)	((Block) (BufferBlocks + ((Size) (bufHdr)->buf_id) * BLCKSZ))
@@ -1521,8 +1540,17 @@ ReleaseAndReadBuffer(Buffer buffer,
 					 Relation relation,
 					 BlockNumber blockNum)
 {
+    static uint64_t invocations = 0;
+    static uint64_t totalNs = 0;
+    static uint64_t ns1 = 0;
+    static uint64_t ns2 = 0;
+    static uint64_t ns3 = 0;
+
+    Buffer ret;
 	ForkNumber	forkNum = MAIN_FORKNUM;
 	BufferDesc *bufHdr;
+
+	struct timespec start = startTimer();
 
 	if (BufferIsValid(buffer))
 	{
@@ -1533,9 +1561,17 @@ ReleaseAndReadBuffer(Buffer buffer,
 			if (bufHdr->tag.blockNum == blockNum &&
 				RelFileNodeEquals(bufHdr->tag.rnode, relation->rd_node) &&
 				bufHdr->tag.forkNum == forkNum)
-				return buffer;
-			ResourceOwnerForgetBuffer(CurrentResourceOwner, buffer);
-			LocalRefCount[-buffer - 1]--;
+            {
+                ret = buffer;
+                // return buffer;
+            }
+			else
+            {
+                ResourceOwnerForgetBuffer(CurrentResourceOwner, buffer);
+                LocalRefCount[-buffer - 1]--;
+                ret = ReadBuffer(relation, blockNum);
+            }
+			ns1 += endTimer(&start);
 		}
 		else
 		{
@@ -1544,12 +1580,38 @@ ReleaseAndReadBuffer(Buffer buffer,
 			if (bufHdr->tag.blockNum == blockNum &&
 				RelFileNodeEquals(bufHdr->tag.rnode, relation->rd_node) &&
 				bufHdr->tag.forkNum == forkNum)
-				return buffer;
-			UnpinBuffer(bufHdr, true);
+            {
+			    ret = buffer;
+//                return buffer;
+            }
+			else
+            {
+                UnpinBuffer(bufHdr, true);
+                ret = ReadBuffer(relation, blockNum);
+            }
+			ns2 += endTimer(&start);
 		}
 	}
 
-	return ReadBuffer(relation, blockNum);
+    totalNs += endTimer(&start);
+    if (++invocations % 100000 == 0)
+    {
+        ereport(LOG, errmsg("ReleaseAndReadBuffer %lu, %lfms, %lfms, %lfms, %lfms",
+            invocations,
+            (totalNs + 0.0) / 1000000,
+            (ns1 + 0.0) / 1000000,
+            (ns2 + 0.0) / 1000000,
+            (ns3 + 0.0) / 1000000
+        ));
+        invocations = 0;
+        totalNs = 0;
+        ns1 = 0;
+        ns2 = 0;
+        ns3 = 0;
+    }
+
+    return ret;
+//    return ReadBuffer(relation, blockNum);
 }
 
 /*
