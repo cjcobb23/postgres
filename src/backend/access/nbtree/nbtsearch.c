@@ -15,6 +15,8 @@
 
 #include "postgres.h"
 
+#include <time.h>
+
 #include "access/nbtree.h"
 #include "access/relscan.h"
 #include "miscadmin.h"
@@ -23,6 +25,24 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 
+static struct timespec startTimer(void);
+struct timespec
+startTimer(void)
+{
+    struct timespec ret;
+    clock_gettime(CLOCK_MONOTONIC, &ret);
+    return ret;
+}
+
+static uint64_t endTimer(struct timespec const* start);
+uint64_t
+endTimer(struct timespec const* start)
+{
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000000000 + end.tv_nsec -
+           start->tv_nsec;
+}
 
 static void _bt_drop_lock_and_maybe_pin(IndexScanDesc scan, BTScanPos sp);
 static OffsetNumber _bt_binsrch(Relation rel, BTScanInsert key, Buffer buf);
@@ -92,8 +112,14 @@ BTStack
 _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		   Snapshot snapshot)
 {
+    static uint64_t invocations = 0;
+    static uint64_t totalNs = 0;
+    static uint64_t partialNs = 0;
+
 	BTStack		stack_in = NULL;
 	int			page_access = BT_READ;
+
+    struct timespec start = startTimer();
 
 	/* Get the root page to start with */
 	*bufP = _bt_getroot(rel, access);
@@ -102,6 +128,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 	if (!BufferIsValid(*bufP))
 		return (BTStack) NULL;
 
+    struct timespec partialStart = startTimer();
 	/* Loop iterates once per level descended in the tree */
 	for (;;)
 	{
@@ -179,6 +206,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		/* okay, all set to move down a level */
 		stack_in = new_stack;
 	}
+	partialNs += endTimer(&partialStart);
 
 	/*
 	 * If we're asked to lock leaf in write mode, but didn't manage to, then
@@ -202,7 +230,18 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 							  snapshot);
 	}
 
-	return stack_in;
+    totalNs += endTimer(&start);
+    if (++invocations % 100000 == 0)
+    {
+        ereport(LOG, errmsg("_bt_search %lu, %lfms, %lfms",
+            invocations,
+            (totalNs + 0.0) / 1000000,
+            (partialNs + 0.0) / 1000000));
+        totalNs = 0;
+        partialNs = 0;
+    }
+
+    return stack_in;
 }
 
 /*
