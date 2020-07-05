@@ -1615,7 +1615,6 @@ ReleaseAndReadBuffer(Buffer buffer,
             (ns2 + 0.0) / 1000000,
             (ns3 + 0.0) / 1000000
         ));
-        invocations = 0;
         reads = 0;
         totalNs = 0;
         ns1 = 0;
