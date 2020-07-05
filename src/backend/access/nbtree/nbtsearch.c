@@ -128,6 +128,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 	if (!BufferIsValid(*bufP))
 		return (BTStack) NULL;
 
+	static uint64_t iterations = 0;
     struct timespec partialStart = startTimer();
 	/* Loop iterates once per level descended in the tree */
 	for (;;)
@@ -141,6 +142,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		BlockNumber par_blkno;
 		BTStack		new_stack;
 
+		++iterations;
 		/*
 		 * Race -- the page we just grabbed may have split since we read its
 		 * pointer in the parent (or metapage).  If it has, we may need to
@@ -233,10 +235,12 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
     totalNs += endTimer(&start);
     if (++invocations % 100000 == 0)
     {
-        ereport(LOG, errmsg("_bt_search %lu, %lfms, %lfms",
+        ereport(LOG, errmsg("_bt_search %lu, %lu, %lfms, %lfms",
             invocations,
+            iterations,
             (totalNs + 0.0) / 1000000,
             (partialNs + 0.0) / 1000000));
+        iterations = 0,
         totalNs = 0;
         partialNs = 0;
     }
