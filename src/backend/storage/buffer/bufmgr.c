@@ -1545,6 +1545,7 @@ ReleaseAndReadBuffer(Buffer buffer,
     static uint64_t ns1 = 0;
     static uint64_t ns2 = 0;
     static uint64_t ns3 = 0;
+    bool return_ret = false;
 
     Buffer ret;
 	ForkNumber	forkNum = MAIN_FORKNUM;
@@ -1563,13 +1564,14 @@ ReleaseAndReadBuffer(Buffer buffer,
 				bufHdr->tag.forkNum == forkNum)
             {
                 ret = buffer;
+                return_ret = true;
                 // return buffer;
             }
 			else
             {
                 ResourceOwnerForgetBuffer(CurrentResourceOwner, buffer);
                 LocalRefCount[-buffer - 1]--;
-                ret = ReadBuffer(relation, blockNum);
+//                ret = ReadBuffer(relation, blockNum);
             }
 			ns1 += endTimer(&start);
 		}
@@ -1582,12 +1584,13 @@ ReleaseAndReadBuffer(Buffer buffer,
 				bufHdr->tag.forkNum == forkNum)
             {
 			    ret = buffer;
+			    return_ret = true;
 //                return buffer;
             }
 			else
             {
                 UnpinBuffer(bufHdr, true);
-                ret = ReadBuffer(relation, blockNum);
+//                ret = ReadBuffer(relation, blockNum);
             }
 			ns2 += endTimer(&start);
 		}
@@ -1610,8 +1613,10 @@ ReleaseAndReadBuffer(Buffer buffer,
         ns3 = 0;
     }
 
-    return ret;
-//    return ReadBuffer(relation, blockNum);
+    if (return_ret)
+        return ret;
+    else
+        return ReadBuffer(relation, blockNum);
 }
 
 /*
