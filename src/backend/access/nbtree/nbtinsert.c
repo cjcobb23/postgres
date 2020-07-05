@@ -113,7 +113,6 @@ _bt_doinsert(Relation rel, IndexTuple itup,
 	bool		checkingunique = (checkUnique != UNIQUE_CHECK_NO);
 
 	struct timespec start = startTimer();
-	struct timespec partialStart = startTimer();
 
 	/* we need an insertion scan key to do our search, so build one */
 	itup_key = _bt_mkscankey(rel, itup);
@@ -238,7 +237,7 @@ top:
 		}
 	}
 
-	partialNs += endTimer(&partialStart);
+    struct timespec partialStart = startTimer();
 
 	if (!fastpath)
 	{
@@ -308,6 +307,7 @@ top:
 		if (itup_key->heapkeyspace)
 			itup_key->scantid = &itup->t_tid;
 	}
+    partialNs += endTimer(&partialStart);
 
 	if (checkUnique != UNIQUE_CHECK_EXISTING)
 	{
