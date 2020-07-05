@@ -660,9 +660,17 @@ Buffer
 ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 				   ReadBufferMode mode, BufferAccessStrategy strategy)
 {
+    static uint64_t invocations = 0;
+    static uint64_t hits = 0;
+    static uint64_t totalNs = 0;
+    static uint64_t ns1 = 0;
+    static uint64_t ns2 = 0;
+    static uint64_t ns3 = 0;
+
 	bool		hit;
 	Buffer		buf;
 
+	struct timespec start = startTimer();
 	/* Open it at the smgr level if not already done */
 	RelationOpenSmgr(reln);
 
@@ -681,10 +689,35 @@ ReadBufferExtended(Relation reln, ForkNumber forkNum, BlockNumber blockNum,
 	 * miss.
 	 */
 	pgstat_count_buffer_read(reln);
+	ns2 += endTimer(&start);
 	buf = ReadBuffer_common(reln->rd_smgr, reln->rd_rel->relpersistence,
 							forkNum, blockNum, mode, strategy, &hit);
+	ns3 += endTimer(&start);
 	if (hit)
-		pgstat_count_buffer_hit(reln);
+    {
+	    ++hits;
+        pgstat_count_buffer_hit(reln);
+    }
+
+	totalNs += endTimer(&start);
+    if (++invocations % 100000 == 0)
+    {
+        ereport(LOG, errmsg("ReadBufferExtended %lu, %lu, %lfms, %lfms, %lfms, %lfms",
+            invocations,
+            hits,
+            (totalNs + 0.0) / 1000000,
+            (ns1 + 0.0) / 1000000,
+            (ns2 + 0.0) / 1000000,
+            (ns3 + 0.0) / 1000000
+        ));
+        invocations = 0;
+        hits = 0;
+        totalNs = 0;
+        ns1 = 0;
+        ns2 = 0;
+        ns3 = 0;
+    }
+
 	return buf;
 }
 

@@ -928,7 +928,6 @@ _bt_relandgetbuf(Relation rel, Buffer obuf, BlockNumber blkno, int access)
 	Buffer		buf;
 
 	Assert(blkno != P_NEW);
-	++invocations;
 	struct timespec start = startTimer();
 	if (BufferIsValid(obuf))
 		LockBuffer(obuf, BUFFER_LOCK_UNLOCK);
