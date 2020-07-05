@@ -142,7 +142,6 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		BTStack		new_stack;
 
 		++iterations;
-        struct timespec partialStart = startTimer();
 		/*
 		 * Race -- the page we just grabbed may have split since we read its
 		 * pointer in the parent (or metapage).  If it has, we may need to
@@ -161,10 +160,10 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		/* if this is a leaf page, we're done */
 		page = BufferGetPage(*bufP);
 		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
-        partialNs += endTimer(&partialStart);
 		if (P_ISLEAF(opaque))
 			break;
 
+        struct timespec partialStart = startTimer();
 		/*
 		 * Find the appropriate item on the internal page, and get the child
 		 * page that it points to.
@@ -174,6 +173,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		itup = (IndexTuple) PageGetItem(page, itemid);
 		blkno = BTreeInnerTupleGetDownLink(itup);
 		par_blkno = BufferGetBlockNumber(*bufP);
+        partialNs += endTimer(&partialStart);
 
 		/*
 		 * We need to save the location of the index entry we chose in the
