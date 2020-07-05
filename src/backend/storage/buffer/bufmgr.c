@@ -1596,6 +1596,12 @@ ReleaseAndReadBuffer(Buffer buffer,
 		}
 	}
 
+	if (!return_ret)
+    {
+	    ret = ReadBuffer(relation, blockNum);
+	    ns3 += endTimer(&start);
+    }
+
     totalNs += endTimer(&start);
     if (++invocations % 100000 == 0)
     {
@@ -1613,10 +1619,7 @@ ReleaseAndReadBuffer(Buffer buffer,
         ns3 = 0;
     }
 
-    if (return_ret)
-        return ret;
-    else
-        return ReadBuffer(relation, blockNum);
+    return ret;
 }
 
 /*
