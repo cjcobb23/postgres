@@ -129,6 +129,10 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		return (BTStack) NULL;
 
 	static uint64_t iterations = 0;
+	static uint64_t depthNs[6] = {0};
+	static uint64_t depthXNs = 0;
+	uint64_t depth = 0;
+	struct timespec loopStart = startTimer();
 	/* Loop iterates once per level descended in the tree */
 	for (;;)
 	{
@@ -141,6 +145,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		BlockNumber par_blkno;
 		BTStack		new_stack;
 
+        ++iterations;
 		/*
 		 * Race -- the page we just grabbed may have split since we read its
 		 * pointer in the parent (or metapage).  If it has, we may need to
@@ -160,9 +165,14 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		page = BufferGetPage(*bufP);
 		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
 		if (P_ISLEAF(opaque))
-			break;
+        {
+            if (depth >= 6)
+                depthXNs += endTimer(&loopStart);
+            else
+                depthNs[depth] + endTimer(&loopStart);
+            break;
+        }
 
-        ++iterations;
 		/*
 		 * Find the appropriate item on the internal page, and get the child
 		 * page that it points to.
@@ -201,8 +211,13 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		if (opaque->btpo.level == 1 && access == BT_WRITE)
 			page_access = BT_WRITE;
 
-		/* drop the read lock on the parent page, acquire one on the child */
+		if (depth >= 6)
+		    depthXNs += endTimer(&loopStart);
+		else
+            depthNs[depth] + endTimer(&loopStart);
+		++depth;
         struct timespec partialStart = startTimer();
+        /* drop the read lock on the parent page, acquire one on the child */
 		*bufP = _bt_relandgetbuf(rel, *bufP, blkno, page_access);
         partialNs += endTimer(&partialStart);
 
@@ -235,14 +250,28 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
     totalNs += endTimer(&start);
     if (++invocations % 100000 == 0)
     {
-        ereport(LOG, errmsg("_bt_search %lu, %lu, %lfms, %lfms",
+        ereport(LOG, errmsg("_bt_search %lu, %lu, %lfms, %lfms. depths: "
+                            "%lfms %lfms %lfms %lfms %lfms %lfms %lfms %lfms",
             invocations,
             iterations,
             (totalNs + 0.0) / 1000000,
-            (partialNs + 0.0) / 1000000));
+            (partialNs + 0.0) / 1000000,
+            (depthNs[0] + 0.0) / 1000000,
+            (depthNs[1] + 0.0) / 1000000,
+            (depthNs[2] + 0.0) / 1000000,
+            (depthNs[3] + 0.0) / 1000000,
+            (depthNs[4] + 0.0) / 1000000,
+            (depthNs[5] + 0.0) / 1000000,
+            (depthXNs + 0.0) / 1000000
+            ));
+
         iterations = 0;
         totalNs = 0;
         partialNs = 0;
+
+        for (uint64_t n = 0; n < 6; ++n)
+            depthNs[n] = 0;
+        depthXNs = 0;
     }
 
     return stack_in;
