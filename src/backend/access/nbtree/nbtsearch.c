@@ -169,7 +169,7 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
             if (depth >= 6)
                 depthXNs += endTimer(&loopStart);
             else
-                depthNs[depth] + endTimer(&loopStart);
+                depthNs[depth] += endTimer(&loopStart);
             break;
         }
 
@@ -212,12 +212,12 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 			page_access = BT_WRITE;
 
 		if (depth >= 6)
-		    depthXNs += endTimer(&loopStart);
+        {
+            depthXNs += endTimer(&loopStart);
+        }
 		else
         {
-            depthNs[depth] + endTimer(&loopStart);
-            ereport(LOG, errmsg("_bt_search depth %lu %lu", depth, depthNs[depth]));
-
+            depthNs[depth] += endTimer(&loopStart);
         }
 		++depth;
         struct timespec partialStart = startTimer();
