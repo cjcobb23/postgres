@@ -948,7 +948,6 @@ _bt_relandgetbuf(Relation rel, Buffer obuf, BlockNumber blkno, int access)
             (ns2 + 0.0) / 1000000,
             (ns3 + 0.0) / 1000000
             ));
-        invocations = 0;
         totalNs = 0;
         ns1 = 0;
         ns2 = 0;
