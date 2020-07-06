@@ -214,7 +214,11 @@ _bt_search(Relation rel, BTScanInsert key, Buffer *bufP, int access,
 		if (depth >= 6)
 		    depthXNs += endTimer(&loopStart);
 		else
+        {
             depthNs[depth] + endTimer(&loopStart);
+            ereport(LOG, errmsg("_bt_search depth %lu %lu", depth, depthNs[depth]));
+
+        }
 		++depth;
         struct timespec partialStart = startTimer();
         /* drop the read lock on the parent page, acquire one on the child */
